@@ -1929,3 +1929,41 @@ Feature: Driver Migration
 
     When connection import database(typedb-imported) from schema file(schema.tql), data file(data.typedb)
     Then connection has database: typedb-imported
+
+
+  Scenario: relations whose players are imported after them survive the import
+    # Implementation-dependent, but this probably leads to relations coming before entities (and an intermediate commit)
+    Given connection open schema transaction for database: typedb
+    Given typeql schema query
+      """
+      define
+        relation nesting, relates nested;
+        relation inner, relates member, plays nesting:nested;
+        entity person, plays inner:member;
+      """
+    Given transaction commits
+    Given connection open write transaction for database: typedb
+    Given typeql write query
+      """
+      insert
+        $p1 isa person; $p2 isa person; $p3 isa person; $p4 isa person; $p5 isa person; $p6 isa person;
+        $p7 isa person; $p8 isa person; $p9 isa person; $p10 isa person; $p11 isa person; $p12 isa person;
+        $p13 isa person; $p14 isa person; $p15 isa person; $p16 isa person; $p17 isa person; $p18 isa person;
+        $i isa inner, links (member: $p1);
+      """
+    Given typeql write query
+      """
+      match $i isa inner; $p1 isa person; $p2 isa person; $p3 isa person;
+      insert $n isa nesting, links (nested: $i);
+      """
+    Given transaction commits
+    When connection get database(typedb) export to schema file(schema.tql), data file(data.typedb)
+
+    When connection import database(typedb-imported) from schema file(schema.tql), data file(data.typedb)
+    Then connection has database: typedb-imported
+    Given connection open read transaction for database: typedb-imported
+    When get answers of typeql read query
+      """
+      match $n isa nesting, links (nested: $i);
+      """
+    Then answer size is: 5832
